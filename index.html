@@ -5439,6 +5439,36 @@
         };
 
         // --- STARTUP ---
+        // --- STARTUP LOGIC (AUTO-LOGIN) ---
+function checkSession() {
+    const savedUid = localStorage.getItem('vsync_uid');
+    const savedAnon = localStorage.getItem('vsync_is_anon') === 'true';
+
+    if (savedUid) {
+        console.log("Found saved session:", savedUid);
+        // Show App immediately (hidden by default in HTML, so we just init logic)
+        simulateLogin(savedUid, savedAnon);
+    } else {
+        // No session, show Login
+        console.log("No session found. Showing Login.");
+        document.getElementById('authScreen').classList.remove('hidden');
+        document.getElementById('appScreen').classList.add('hidden');
+        loadDevUsers();
+    }
+}
+
+// Run immediately
+checkSession();
+window.performLogout = function() {
+    if(confirm("Are you sure you want to log out?")) {
+        // Clear saved data
+        localStorage.removeItem('vsync_uid');
+        localStorage.removeItem('vsync_is_anon');
+        
+        // Reload page to return to fresh login screen
+        window.location.reload();
+    }
+};
         document.getElementById('authScreen').classList.remove('hidden');
         document.getElementById('appScreen').classList.add('hidden');
 
@@ -5706,67 +5736,67 @@
 
         // --- 2. UPDATE LOGIN TO START TRACKING ---
         function simulateLogin(uid, isAnonSession) {
-            db.collection('users').doc(uid).get().then(doc => {
-                const realData = doc.data();
+    // 1. SAVE SESSION TO LOCAL STORAGE (The Fix)
+    localStorage.setItem('vsync_uid', uid);
+    localStorage.setItem('vsync_is_anon', isAnonSession);
 
-                // 1. Create Session Data
-                if (isAnonSession) {
-                    window.currentUserData = {
-                        ...realData,
-                        // MASKED DATA FOR FRONTEND LOGIC
-                        displayNameOverride: "Anonymous",
-                        roleOverride: "Guest",
-                        profilePicOverride: "",
-                        isAnonymousSession: true,
-                        realYear: realData.year // Keep real year accessible for logic but not display
-                    };
-                } else {
-                    window.currentUserData = { ...realData, isAnonymousSession: false };
-                }
-                window.currentUser = { uid: doc.id };
-                currentUser = window.currentUser;
-                currentUserData = window.currentUserData;
+    db.collection('users').doc(uid).get().then(doc => {
+        const realData = doc.data();
 
-                // 2. UI Switch
-                document.getElementById('authScreen').classList.add('hidden');
-                document.getElementById('appScreen').classList.remove('hidden');
+        // 2. Create Session Data
+        if (isAnonSession) {
+            window.currentUserData = {
+                ...realData,
+                displayNameOverride: "Anonymous",
+                roleOverride: "Guest",
+                profilePicOverride: "",
+                isAnonymousSession: true,
+                realYear: realData.year
+            };
+        } else {
+            window.currentUserData = { ...realData, isAnonymousSession: false };
+        }
+        window.currentUser = { uid: doc.id };
+        currentUser = window.currentUser;
+        currentUserData = window.currentUserData;
 
-                // 3. UI Restrictions for Anonymous
-                if (isAnonSession) {
-                    // HIDE TABS
-                    const tabs = document.querySelectorAll('.tab-button');
-                    tabs.forEach(t => {
-                        if (t.innerText === "Messages" || t.innerText === "Explore") {
-                            t.style.display = 'none';
-                        }
-                    });
+        // 3. UI Switch
+        document.getElementById('authScreen').classList.add('hidden');
+        document.getElementById('appScreen').classList.remove('hidden');
 
-                    // HIDE NAVBAR ICONS
-                    const navRight = document.querySelector('.navbar-right');
-                    // Hide connection/request icons (first 2 children)
-                    navRight.children[0].children[0].classList.add('hidden');
-                    navRight.children[0].children[1].classList.add('hidden');
-
-                    updateUserInfo();
-                    loadCommunity(); // Only load community
-                    switchTab('community');
-                } else {
-                    // RESTORE UI (In case of re-login)
-                    document.querySelectorAll('.tab-button').forEach(t => t.style.display = 'block');
-                    const navRight = document.querySelector('.navbar-right');
-                    navRight.children[0].children[0].classList.remove('hidden');
-                    navRight.children[0].children[1].classList.remove('hidden');
-
-                    loadActivePoll();
-                    initMessageBadgeListener();
-                    updateUserInfo();
-                    loadDevUsers();
-                    initNotificationListener();
-                    startPresenceHeartbeat();
-                    switchTab('community');
+        // 4. UI Restrictions for Anonymous
+        if (isAnonSession) {
+            const tabs = document.querySelectorAll('.tab-button');
+            tabs.forEach(t => {
+                if (t.innerText === "Messages" || t.innerText === "Explore") {
+                    t.style.display = 'none';
                 }
             });
+
+            const navRight = document.querySelector('.navbar-right');
+            navRight.children[0].children[0].classList.add('hidden');
+            navRight.children[0].children[1].classList.add('hidden');
+
+            updateUserInfo();
+            loadCommunity(); 
+            switchTab('community');
+        } else {
+            // Restore UI
+            document.querySelectorAll('.tab-button').forEach(t => t.style.display = 'block');
+            const navRight = document.querySelector('.navbar-right');
+            navRight.children[0].children[0].classList.remove('hidden');
+            navRight.children[0].children[1].classList.remove('hidden');
+
+            loadActivePoll();
+            initMessageBadgeListener();
+            updateUserInfo();
+            loadDevUsers();
+            initNotificationListener();
+            startPresenceHeartbeat();
+            switchTab('community');
         }
+    });
+}
         // --- AUTH: TOGGLE UI ---
         function toggleAuthMode(mode) {
             if (mode === 'register') {
