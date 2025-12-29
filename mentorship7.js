@@ -764,19 +764,29 @@ function handleRegister(e) {
     submitBtn.disabled = true;
     submitBtn.innerText = "Creating Account...";
 
-    // 1. Get Values
+    // 1. Get Values & Capitalize Logic
     const isAnon = document.getElementById('regAnon').checked;
-    const name = document.getElementById('regName').value.trim();
+    
+    // --- NEW NAME LOGIC START ---
+    const fNameRaw = document.getElementById('regFirstName').value.trim();
+    const lNameRaw = document.getElementById('regLastName').value.trim();
+
+    // Helper to Capitalize (e.g. "raHUL" -> "Rahul")
+    const formatName = (str) => {
+        if (!str) return "";
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    };
+
+    const fullName = `${formatName(fNameRaw)} ${formatName(lNameRaw)}`;
+    // --- NEW NAME LOGIC END ---
+
     const email = document.getElementById('regEmail').value.trim().toLowerCase();
     const password = document.getElementById('regPass').value;
     const age = document.getElementById('regAge').value;
     const gender = document.getElementById('regGender').value;
     const year = document.getElementById('regYear').value;
     const college = document.getElementById('regCollege').value;
-
-    // --- NEW: CAPTURE SELECTED ROLE ---
     const role = document.getElementById('regRole').value;
-    // ----------------------------------
 
     if (!password || password.length < 6) {
         alert("Password must be at least 6 characters.");
@@ -788,7 +798,7 @@ function handleRegister(e) {
     const performRegistration = (base64Pic) => {
         const newUserId = "user_" + Date.now();
 
-        // Collect Work Experience (if any)
+        // Collect Work Experience
         const workExpInputs = document.querySelectorAll('.exp-input');
         const expertise = [];
         workExpInputs.forEach(input => {
@@ -797,17 +807,17 @@ function handleRegister(e) {
 
         const newUser = {
             userId: newUserId,
-            name: name,
+            name: fullName, // <--- SAVING THE FORMATTED NAME
             email: email,
-            role: role, // <--- SAVES 'student' OR 'mentor'
+            role: role,
             year: year,
             college: college,
             age: age,
             gender: gender,
             profilePic: base64Pic || "",
-            expertise: expertise, // Save work experience
+            expertise: expertise,
             isVerified: false,
-            score: 0, // Initialize score
+            score: 0,
             createdAt: new Date(),
             password: password
         };
@@ -816,7 +826,6 @@ function handleRegister(e) {
         db.collection('users').doc(newUserId).set(newUser)
             .then(() => {
                 if (typeof showToast === 'function') showToast("Account created!");
-                // 3. Log them in immediately
                 simulateLogin(newUserId, isAnon);
             })
             .catch(err => {
@@ -2722,6 +2731,7 @@ async function loadCommunity(forceRefresh = false) {
             listEl.innerHTML = `<p style="text-align:center; color:var(--text-secondary); margin-top:30px;">No posts found.</p>`;
             return;
         }
+        loadStories();
 
         const htmlPromises = posts.map(async p => {
             const isAuthor = currentUser && p.authorId === currentUser.uid;
@@ -3393,7 +3403,33 @@ function deletePost(postId) {
         "Delete Post?",
         "This post will be permanently removed from the community.",
         () => {
-            db.collection('posts').doc(postId).delete().then(() => loadCommunity());
+            // 1. Delete from Database
+            db.collection('posts').doc(postId).delete().then(() => {
+                showToast("Post deleted.");
+
+                // 2. IMMEDIATE UI UPDATE: Remove the card from the screen
+                const card = document.getElementById(`post-card-${postId}`);
+                if (card) {
+                    // Add a fade-out animation
+                    card.style.transition = "all 0.3s ease";
+                    card.style.opacity = "0";
+                    card.style.transform = "scale(0.9)";
+                    
+                    // Remove after animation finishes
+                    setTimeout(() => {
+                        card.remove();
+                        
+                        // Optional: If list becomes empty, show the "No posts" message
+                        const listEl = document.getElementById('communityPostsList');
+                        if (listEl && listEl.children.length === 0) {
+                            listEl.innerHTML = '<div class="empty-state-new">No posts found.</div>';
+                        }
+                    }, 300);
+                }
+            }).catch(error => {
+                console.error("Error removing post: ", error);
+                alert("Could not delete post.");
+            });
         }
     );
 }
@@ -3646,6 +3682,672 @@ function submitReply(postId, parentId) {
             showToast("Failed to send reply.");
         });
 }
+/* =========================================
+   STORY SYSTEM LOGIC
+   ========================================= */
+
+let activeStoryGroup = null; // Currently viewed user's stories
+let currentStoryIndex = 0;
+let storyTimer = null;
+
+// 1. LOAD STORIES
+function loadStories() {
+    const container = document.getElementById('storiesBar');
+    if (!container || !currentUser) return;
+
+    // Reset Container: Keep only the "Add Story" button
+    const addBtn = container.querySelector('.story-item[onclick="openStoryUploadModal()"]');
+    container.innerHTML = ''; 
+    if (addBtn) container.appendChild(addBtn);
+    else {
+        // Re-create Add Button if lost
+        const div = document.createElement('div');
+        div.className = 'story-item';
+        div.onclick = openStoryUploadModal;
+        div.innerHTML = `
+        <div class="story-ring-wrapper">
+            <div class="story-ring add-story"></div>
+            <div id="myStoryAvatar" class="story-avatar-placeholder">+</div>
+        </div>
+        <span class="story-name">Add Story</span>`;
+        container.appendChild(div);
+    }
+
+    // Update My Avatar on the Add Button
+    const myPic = window.currentUserData.profilePic;
+    const myPlaceholder = document.getElementById('myStoryAvatar');
+    if(myPic && myPlaceholder) {
+        myPlaceholder.innerHTML = `<img src="${myPic}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+        myPlaceholder.innerHTML += `<div style="position:absolute; bottom:0; right:0; background:var(--primary-color); color:white; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; border:2px solid var(--bg-card);">+</div>`;
+    }
+
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    db.collection('stories')
+      .where('createdAt', '>', yesterday)
+      .orderBy('createdAt', 'asc')
+      .get()
+      .then(async (snap) => {
+          const storiesByUser = {};
+
+          snap.forEach(doc => {
+              const s = doc.data();
+              // Privacy Filter: Skip if private and not mine
+              if(s.isPrivate && s.userId !== currentUser.uid) return; 
+
+              if (!storiesByUser[s.userId]) {
+                  storiesByUser[s.userId] = {
+                      user: { name: s.userName, pic: s.userPic, id: s.userId },
+                      items: [],
+                      hasUnseen: false
+                  };
+              }
+              storiesByUser[s.userId].items.push({ ...s, id: doc.id });
+
+              if (!s.viewers || !s.viewers.includes(currentUser.uid)) {
+                  storiesByUser[s.userId].hasUnseen = true;
+              }
+          });
+
+          const sortedGroups = Object.values(storiesByUser).sort((a, b) => {
+              // Your story first? Or Unseen first? Let's do Unseen first.
+              if (a.hasUnseen && !b.hasUnseen) return -1;
+              if (!a.hasUnseen && b.hasUnseen) return 1;
+              return 0; 
+          });
+
+          sortedGroups.forEach(group => {
+              const ringClass = group.hasUnseen ? 'story-ring unseen' : 'story-ring';
+              const name = group.user.id === currentUser.uid ? 'Your Story' : group.user.name;
+
+              const div = document.createElement('div');
+              div.className = 'story-item';
+              // Add ID for easy removal later
+              div.id = `story-bubble-${group.user.id}`;
+              div.onclick = (e) => openStoryViewer(group, e.currentTarget);
+              
+              const picHtml = group.user.pic 
+                  ? `<img src="${group.user.pic}" class="story-avatar">`
+                  : `<div class="story-avatar" style="background:#333; display:flex; align-items:center; justify-content:center;">${name.charAt(0)}</div>`;
+
+              div.innerHTML = `
+                  <div class="story-ring-wrapper">
+                      <div class="${ringClass}"></div>
+                      ${picHtml}
+                  </div>
+                  <span class="story-name">${name}</span>
+              `;
+              container.appendChild(div);
+          });
+      });
+}
+
+// 2. UPLOAD LOGIC
+function openStoryUploadModal() {
+    document.getElementById('storyUploadModal').classList.add('active');
+    // Reset State
+    resetEditor();
+    document.getElementById('btnPostStory').disabled = true;
+    document.getElementById('storyFileInput').value = "";
+}
+function resetEditor() {
+    const img = document.getElementById('storyEditorImg');
+    const vid = document.getElementById('storyEditorVideo');
+    const placeholder = document.getElementById('storyPlaceholder');
+    const zoomCtrl = document.getElementById('zoomControls');
+
+    img.style.display = 'none';
+    vid.style.display = 'none';
+    placeholder.style.display = 'flex';
+    zoomCtrl.style.display = 'none';
+
+    editorState = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0, imgElement: img, videoElement: vid };
+    img.style.transform = `translate(0px, 0px) scale(1)`;
+}
+function initEditorGestures(el) {
+    el.onmousedown = startPan;
+    el.ontouchstart = startPan;
+    
+    // Zoom on wheel
+    el.onwheel = (e) => {
+        e.preventDefault();
+        const delta = e.deltaY * -0.001;
+        adjustZoom(delta);
+    };
+}
+
+function startPan(e) {
+    e.preventDefault();
+    editorState.panning = true;
+    editorState.startX = (e.clientX || e.touches[0].clientX) - editorState.pointX;
+    editorState.startY = (e.clientY || e.touches[0].clientY) - editorState.pointY;
+    
+    document.addEventListener('mousemove', movePan);
+    document.addEventListener('touchmove', movePan, { passive: false });
+    document.addEventListener('mouseup', endPan);
+    document.addEventListener('touchend', endPan);
+}
+
+function movePan(e) {
+    if (!editorState.panning) return;
+    e.preventDefault();
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
+    
+    editorState.pointX = clientX - editorState.startX;
+    editorState.pointY = clientY - editorState.startY;
+    
+    updateEditorTransform();
+}
+
+function endPan() {
+    editorState.panning = false;
+    document.removeEventListener('mousemove', movePan);
+    document.removeEventListener('touchmove', movePan);
+    document.removeEventListener('mouseup', endPan);
+    document.removeEventListener('touchend', endPan);
+}
+
+function adjustZoom(delta) {
+    editorState.scale = Math.min(Math.max(0.5, editorState.scale + delta), 3); // Limit scale 0.5x to 3x
+    updateEditorTransform();
+}
+
+function updateEditorTransform() {
+    const img = document.getElementById('storyEditorImg');
+    if(img) {
+        img.style.transform = `translate(${editorState.pointX}px, ${editorState.pointY}px) scale(${editorState.scale})`;
+    }
+}
+let storyFileToUpload = null;
+let editorState = {
+    scale: 1,
+    panning: false,
+    pointX: 0,
+    pointY: 0,
+    startX: 0,
+    startY: 0,
+    imgElement: null,
+    videoElement: null
+};
+
+function handleStoryFileSelect(input) {
+    if (input.files && input.files[0]) {
+        storyFileToUpload = input.files[0];
+        const url = URL.createObjectURL(storyFileToUpload);
+        
+        const img = document.getElementById('storyEditorImg');
+        const vid = document.getElementById('storyEditorVideo');
+        const placeholder = document.getElementById('storyPlaceholder');
+        const zoomCtrl = document.getElementById('zoomControls');
+
+        if (storyFileToUpload.type.startsWith('video/')) {
+            // Video Mode (Simple display, no crop for performance)
+            img.style.display = 'none';
+            zoomCtrl.style.display = 'none';
+            vid.src = url;
+            vid.style.display = 'block';
+            vid.play();
+        } else {
+            // Image Mode (Enable Editor)
+            vid.style.display = 'none';
+            vid.src = "";
+            img.src = url;
+            img.style.display = 'block';
+            zoomCtrl.style.display = 'flex';
+            
+            // Initialize Position (Center)
+            img.onload = () => {
+                editorState.pointX = 0;
+                editorState.pointY = 0;
+                editorState.scale = 1;
+                updateEditorTransform();
+            };
+        }
+        
+        placeholder.style.display = 'none';
+        document.getElementById('btnPostStory').disabled = false;
+        
+        // Init Gestures
+        initEditorGestures(img);
+    }
+}
+async function uploadStory() {
+    if (!storyFileToUpload) return;
+    
+    const btn = document.getElementById('btnPostStory');
+    btn.innerText = "Processing...";
+    btn.disabled = true;
+
+    try {
+        let finalFile = storyFileToUpload;
+
+        // IF IMAGE: Crop it using Canvas
+        if (storyFileToUpload.type.startsWith('image/')) {
+            finalFile = await cropImageToCanvas();
+        }
+
+        const isPrivate = document.getElementById('storyPrivacyToggle').checked;
+        
+        btn.innerText = "Uploading...";
+        const mediaUrl = await uploadFileToStorage(finalFile);
+        
+        await db.collection('stories').add({
+            userId: currentUser.uid,
+            userName: window.currentUserData.name,
+            userPic: window.currentUserData.profilePic || "",
+            mediaUrl: mediaUrl,
+            mediaType: storyFileToUpload.type.startsWith('video/') ? 'video' : 'image',
+            isPrivate: isPrivate,
+            viewers: [],
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        });
+
+        closeModal('storyUploadModal');
+        btn.innerText = "Post Story";
+        loadStories(); 
+        showToast("Story Added!");
+
+    } catch (e) {
+        console.error(e);
+        showToast("Upload failed.");
+        btn.innerText = "Post Story";
+        btn.disabled = false;
+    }
+}
+
+/* --- CANVAS CROPPER UTILITY --- */
+/* --- PRECISE CANVAS CROPPER (WYSIWYG) --- */
+function cropImageToCanvas() {
+    return new Promise((resolve) => {
+        const img = document.getElementById('storyEditorImg');
+        const cropBox = document.getElementById('storyCropArea');
+        
+        // 1. Setup High-Res Canvas (9:16)
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1080;
+        canvas.height = 1920;
+
+        // 2. Get Visual Coordinates (The "Truth")
+        const imgRect = img.getBoundingClientRect();
+        const cropRect = cropBox.getBoundingClientRect();
+
+        // 3. Calculate Scale Ratio (Canvas Pixels per Screen Pixel)
+        // We base this on the width to ensure resolution is consistent
+        const scaleFactor = canvas.width / cropRect.width;
+
+        // 4. Calculate Position relative to the Crop Box
+        // (imgRect.left - cropRect.left) is the distance from the left edge of the crop box
+        const relativeX = (imgRect.left - cropRect.left) * scaleFactor;
+        const relativeY = (imgRect.top - cropRect.top) * scaleFactor;
+        
+        const relativeWidth = imgRect.width * scaleFactor;
+        const relativeHeight = imgRect.height * scaleFactor;
+
+        // 5. Fill Black Background (for any empty space)
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 6. Draw exactly what is visible
+        // We draw the image at the calculated offsets with the calculated dimensions
+        ctx.drawImage(img, relativeX, relativeY, relativeWidth, relativeHeight);
+
+        // 7. Export
+        canvas.toBlob((blob) => {
+            blob.name = "story_" + Date.now() + ".jpg"; 
+            resolve(blob);
+        }, 'image/jpeg', 0.90);
+    });
+}
+
+let lastStoryOrigin = null;
+function openStoryViewer(group, sourceElement) {
+    activeStoryGroup = group;
+    
+    // 1. Calculate Start Index (First Unseen)
+    currentStoryIndex = group.items.findIndex(item => 
+        !item.viewers || !item.viewers.includes(currentUser.uid)
+    );
+    if (currentStoryIndex === -1) currentStoryIndex = 0;
+
+    const modal = document.getElementById('storyViewerModal');
+
+    // 2. CALCULATE ANIMATION ORIGIN
+    if (sourceElement) {
+        const rect = sourceElement.getBoundingClientRect();
+        // Find center of the clicked bubble
+        const centerX = rect.left + (rect.width / 2);
+        const centerY = rect.top + (rect.height / 2);
+        
+        // Apply origin to the modal so it grows FROM this point
+        modal.style.transformOrigin = `${centerX}px ${centerY}px`;
+        
+        // Save for closing animation
+        lastStoryOrigin = `${centerX}px ${centerY}px`; 
+    }
+
+    // 3. ACTIVATE & ANIMATE
+    modal.classList.remove('story-zoom-out'); // Safety reset
+    modal.classList.add('active'); // Make visible (display: flex)
+    
+    // Force Reflow (flush CSS changes before adding animation class)
+    void modal.offsetWidth; 
+    
+    modal.classList.add('story-zoom-in');
+
+    // 4. Clean up animation class after it finishes (clean state)
+    setTimeout(() => {
+        modal.classList.remove('story-zoom-in');
+        modal.style.transform = 'scale(1)'; // Ensure it stays open
+        modal.style.opacity = '1';
+        modal.style.borderRadius = '0';
+    }, 360);
+
+    renderStoryFrame();
+}
+
+/* --- ANIMATED STORY CLOSER (Fixed: No Flicker) --- */
+function closeStoryViewer() {
+    const modal = document.getElementById('storyViewerModal');
+    
+    // 1. Pause Content
+    clearTimeout(storyTimer);
+    const vid = document.querySelector('#storyViewContent video');
+    if(vid) vid.pause();
+
+    // 2. Set Origin (Use the one we saved when opening)
+    if (lastStoryOrigin) {
+        modal.style.transformOrigin = lastStoryOrigin;
+    }
+
+    // 3. ADD CLOSING ANIMATION
+    modal.classList.add('story-zoom-out');
+
+    // 4. Wait for Animation, THEN hide
+    // Increased delay slightly (250ms -> 300ms) to ensure animation finishes fully
+    setTimeout(() => {
+        modal.classList.remove('active');       // Hide display
+        modal.classList.remove('story-zoom-out'); // Reset anim class
+        
+        // Reset properties
+        modal.style.transform = '';
+        modal.style.opacity = '';
+        modal.style.borderRadius = '';
+        
+        // 5. UPDATE RING COLOR LOCALLY (Instead of reloading everything)
+        updateLocalStoryRing();
+        
+    }, 300); 
+}
+
+/* --- HELPER: Turn Ring Grey without Reloading --- */
+function updateLocalStoryRing() {
+    if (!activeStoryGroup || !activeStoryGroup.user) return;
+
+    // Check if we have seen EVERYTHING in this group
+    // We check our local data which was updated in renderStoryFrame
+    const stillHasUnseen = activeStoryGroup.items.some(item => 
+        !item.viewers || !item.viewers.includes(currentUser.uid)
+    );
+
+    if (!stillHasUnseen) {
+        // Find the specific bubble ID we created in loadStories
+        const bubble = document.getElementById(`story-bubble-${activeStoryGroup.user.id}`);
+        if (bubble) {
+            const ring = bubble.querySelector('.story-ring');
+            if (ring) {
+                // Remove the blue gradient class
+                ring.classList.remove('unseen'); 
+                // It will revert to the default CSS border (grey)
+            }
+        }
+    }
+}
+
+function renderStoryFrame() {
+    clearTimeout(storyTimer);
+    const story = activeStoryGroup.items[currentStoryIndex];
+    const contentDiv = document.getElementById('storyViewContent');
+    const progressDiv = document.getElementById('storyProgressBars');
+
+    // Header Info
+    document.getElementById('viewerName').innerText = activeStoryGroup.user.name;
+    document.getElementById('viewerAvatar').src = activeStoryGroup.user.pic || "https://via.placeholder.com/32";
+    document.getElementById('viewerTime').innerText = timeAgo(story.createdAt);
+
+    // Show/Hide Delete Button (Only for Me)
+    const menuWrapper = document.getElementById('storyMenuWrapper');
+    if (story.userId === currentUser.uid) {
+        menuWrapper.style.display = 'block';
+    } else {
+        menuWrapper.style.display = 'none';
+    }
+
+    // Close Menu if open from previous slide
+    document.getElementById('storyOptionsMenu').classList.remove('active');
+
+    // Progress Bars
+    let barsHtml = '';
+    activeStoryGroup.items.forEach((_, idx) => {
+        let width = '0%';
+        if (idx < currentStoryIndex) width = '100%'; 
+        barsHtml += `
+        <div class="progress-segment" style="flex:1; height:2px; background:rgba(255,255,255,0.3); margin:0 2px; border-radius:2px; overflow:hidden;">
+            <div class="progress-fill" id="bar-${idx}" style="width:${width}; height:100%; background:white;"></div>
+        </div>`;
+    });
+    progressDiv.innerHTML = barsHtml;
+
+    // Render Media
+    if (story.mediaType === 'video') {
+        contentDiv.innerHTML = `<video src="${story.mediaUrl}" autoplay playsinline class="story-media-fullscreen"></video>`;
+        const vid = contentDiv.querySelector('video');
+        vid.onended = nextStory;
+        vid.ontimeupdate = () => {
+             const pct = (vid.currentTime / vid.duration) * 100;
+             const bar = document.getElementById(`bar-${currentStoryIndex}`);
+             if(bar) {
+                 bar.style.transition = "width 0.1s linear";
+                 bar.style.width = `${pct}%`;
+             }
+        };
+    } else {
+        contentDiv.innerHTML = `<img src="${story.mediaUrl}" class="story-media-fullscreen">`;
+        const bar = document.getElementById(`bar-${currentStoryIndex}`);
+        if(bar) {
+            bar.style.transition = "none";
+            bar.style.width = "0%";
+            setTimeout(() => {
+                bar.style.transition = "width 5s linear";
+                bar.style.width = "100%";
+            }, 50);
+        }
+        storyTimer = setTimeout(nextStory, 5000);
+    }
+
+    // Mark as Viewed
+    if (!story.viewers || !story.viewers.includes(currentUser.uid)) {
+        db.collection('stories').doc(story.id).update({
+            viewers: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+        });
+        if(!story.viewers) story.viewers = [];
+        story.viewers.push(currentUser.uid);
+    }
+}
+
+function nextStory() {
+    if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+        currentStoryIndex++;
+        renderStoryFrame(); // This triggers the new slide animation
+    } else {
+        closeStoryViewer(); // Close if no more stories
+    }
+}
+
+function prevStory() {
+    if (currentStoryIndex > 0) {
+        currentStoryIndex--;
+        renderStoryFrame();
+    } else {
+        // Optional: Go to previous user's story if we implement multi-user flow
+        // For now, just restart or do nothing
+        currentStoryIndex = 0;
+        renderStoryFrame();
+    }
+}
+function toggleStoryMenu(event) {
+    event.stopPropagation();
+    
+    const menu = document.getElementById('storyOptionsMenu');
+    const isActive = menu.classList.contains('active');
+
+    if (isActive) {
+        menu.classList.remove('active');
+        resumeStoryPlayback();
+    } else {
+        menu.classList.add('active');
+        pauseStoryPlayback();
+    }
+}
+
+function deleteCurrentStory() {
+    // 1. Pause
+    pauseStoryPlayback();
+
+    // 2. Custom App Confirmation (No Native Prompt)
+    showConfirm(
+        "Delete Story?", 
+        "This will disappear forever.",
+        () => {
+            // CONFIRMED ACTION
+            const story = activeStoryGroup.items[currentStoryIndex];
+            const storyId = story.id;
+            const userId = story.userId;
+
+            // Optimistic UI Update: Remove from local list immediately
+            activeStoryGroup.items.splice(currentStoryIndex, 1);
+
+            // DB Delete
+            db.collection('stories').doc(storyId).delete();
+
+            showToast("Story deleted.");
+
+            // Decide where to go next
+            if (activeStoryGroup.items.length === 0) {
+                // User has no more stories
+                closeStoryViewer();
+                
+                // FORCE REMOVE BUBBLE FROM DOM IMMEDIATELY
+                const bubble = document.getElementById(`story-bubble-${userId}`);
+                if (bubble) bubble.remove();
+
+            } else {
+                // Advance to next story
+                if (currentStoryIndex >= activeStoryGroup.items.length) {
+                    currentStoryIndex = activeStoryGroup.items.length - 1;
+                }
+                renderStoryFrame();
+            }
+        }
+    );
+    
+    // Note: If user clicks "Cancel" in showConfirm, the story stays paused.
+    // They can simply tap next/prev to resume.
+}
+
+function pauseStoryPlayback() {
+    clearTimeout(storyTimer);
+    const vid = document.querySelector('#storyViewContent video');
+    if(vid) vid.pause();
+}
+
+function resumeStoryPlayback() {
+    const vid = document.querySelector('#storyViewContent video');
+    if(vid) {
+        vid.play();
+    } else {
+        storyTimer = setTimeout(nextStory, 3000); // Give 3s buffer
+    }
+}
+
+/* --- UPDATED RENDER FRAME (Controls Visibility) --- */
+function renderStoryFrame() {
+    // ... (Your existing header/progress bar code stays the same) ...
+    clearTimeout(storyTimer);
+    const story = activeStoryGroup.items[currentStoryIndex];
+    const contentDiv = document.getElementById('storyViewContent');
+    const progressDiv = document.getElementById('storyProgressBars');
+
+    // 1. Header Info (Copy your existing code here)
+    document.getElementById('viewerName').innerText = activeStoryGroup.user.name;
+    document.getElementById('viewerAvatar').src = activeStoryGroup.user.pic || "https://via.placeholder.com/32";
+    document.getElementById('viewerTime').innerText = timeAgo(story.createdAt);
+
+    // 2. Progress Bars (Copy your existing code here)
+    let barsHtml = '';
+    activeStoryGroup.items.forEach((_, idx) => {
+        let width = '0%';
+        if (idx < currentStoryIndex) width = '100%'; 
+        barsHtml += `
+        <div class="progress-segment" style="flex:1; height:2px; background:rgba(255,255,255,0.3); margin:0 2px; border-radius:2px; overflow:hidden;">
+            <div class="progress-fill" id="bar-${idx}" style="width:${width}; height:100%; background:white;"></div>
+        </div>`;
+    });
+    progressDiv.innerHTML = barsHtml;
+
+    // --- NEW: SHOW/HIDE 3-DOTS BUTTON ---
+    const menuWrapper = document.getElementById('storyMenuWrapper');
+    const menu = document.getElementById('storyOptionsMenu');
+    
+    // Always close menu when swiping to new story
+    if(menu) menu.classList.remove('active'); 
+
+    if (story.userId === currentUser.uid) {
+        menuWrapper.style.display = 'block';
+    } else {
+        menuWrapper.style.display = 'none';
+    }
+    // -------------------------------------
+
+    // 3. Render Media (Existing Logic)
+    if (story.mediaType === 'video') {
+        contentDiv.innerHTML = `<video src="${story.mediaUrl}" autoplay playsinline class="story-media-fullscreen"></video>`;
+        const vid = contentDiv.querySelector('video');
+        vid.onended = nextStory;
+        vid.ontimeupdate = () => {
+             const pct = (vid.currentTime / vid.duration) * 100;
+             const bar = document.getElementById(`bar-${currentStoryIndex}`);
+             if(bar) {
+                 bar.style.transition = "width 0.1s linear";
+                 bar.style.width = `${pct}%`;
+             }
+        };
+    } else {
+        contentDiv.innerHTML = `<img src="${story.mediaUrl}" class="story-media-fullscreen">`;
+        const bar = document.getElementById(`bar-${currentStoryIndex}`);
+        if(bar) {
+            bar.style.transition = "none";
+            bar.style.width = "0%";
+            setTimeout(() => {
+                bar.style.transition = "width 5s linear";
+                bar.style.width = "100%";
+            }, 50);
+        }
+        storyTimer = setTimeout(nextStory, 5000);
+    }
+
+    // 4. Mark as Viewed (Existing Logic)
+    if (!story.viewers || !story.viewers.includes(currentUser.uid)) {
+        db.collection('stories').doc(story.id).update({
+            viewers: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+        });
+        if(!story.viewers) story.viewers = [];
+        story.viewers.push(currentUser.uid);
+    }
+}
+
 
 function buildCommentNode(c, postId) {
     const isAuthor = currentUser && c.authorId === currentUser.uid;
