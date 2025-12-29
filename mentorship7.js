@@ -2877,7 +2877,7 @@ async function loadCommunity(forceRefresh = false) {
                         </div>
                     </div>
 
-                    <div style="cursor:pointer;" onclick="viewPost('${p.id}')">
+                    <div class="post-click-area" style="cursor:pointer; display:block;" onclick="viewPost('${p.id}')">
                         <div style="margin-bottom:8px;">
                             <div style="font-size:17px; font-weight:700; margin-bottom:6px;">${escapeHtml(p.title)}</div>
                             <div>${tagsHtml}</div>
@@ -2998,15 +2998,23 @@ window.closeModal = function (modalId) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
 
-    // 1. Add the closing class to trigger CSS animations
+    // 1. CLEAR MANUAL TRANSFORMS (Important for Swipe Logic)
+    const content = modal.querySelector('.modal-content');
+    if (content) {
+        content.style.transform = ''; // Remove inline drag styles
+    }
+
     modal.classList.add('closing');
 
-    // 2. Wait for the animation to finish (300ms) before hiding
     setTimeout(() => {
-        modal.classList.remove('active');   // Hide display
-        modal.classList.remove('closing');  // Reset animation state
-        unlockScroll();                     // Re-enable body scrolling
-    }, 280); // Slightly less than 300ms to prevent a flash at the end
+        modal.classList.remove('active');
+        modal.classList.remove('closing');
+        
+        // --- EXTRA CLEANUP ---
+        if (content) content.style.transform = ''; 
+        
+        unlockScroll();
+    }, 280);
 };
 // --- SYNC PROFILE CHANGES TO OLD POSTS ---
 // --- SYNC PROFILE CHANGES TO OLD POSTS ---
@@ -5542,9 +5550,144 @@ function loadLeaderboard() {
             listEl.innerHTML = '<p style="color:red; text-align:center;">Error loading leaderboard.</p>';
         });
 }
+/* =========================================
+   GLOBAL SWIPE-TO-CLOSE PHYSICS
+   ========================================= */
 
-// --- 2. FIX CRASH IN POST MODAL (Safety Checks) ---
-// --- 2. FIX CRASH IN POST MODAL (Safety Checks) ---
+/* =========================================
+   GLOBAL SWIPE-TO-CLOSE (Strict Physics Fix)
+   ========================================= */
+
+/* =========================================
+   GLOBAL SWIPE-TO-CLOSE (Seamless Drop Fix)
+   ========================================= */
+
+function enableSwipeToClose(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    const content = modal.querySelector('.modal-content');
+    if (!content) return;
+
+    // (Handlebar injection removed per previous request)
+
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+    let startTime = 0;
+
+    const onTouchStart = (e) => {
+        // Only allow swipe if at top
+        if (content.scrollTop > 0) return;
+
+        startY = e.touches[0].clientY;
+        startTime = Date.now();
+        isDragging = false;
+        
+        // Kill any ongoing transitions instantly
+        content.style.transition = 'none';
+    };
+
+    const onTouchMove = (e) => {
+        const touchY = e.touches[0].clientY;
+        const deltaY = touchY - startY;
+
+        if (!isDragging) {
+            if (deltaY < 0) return; // Scrolling up
+            if (deltaY > 0 && content.scrollTop <= 0) {
+                isDragging = true;
+                content.classList.add('is-dragging');
+            }
+        }
+
+        if (isDragging) {
+            if (e.cancelable) e.preventDefault(); 
+            e.stopPropagation();
+
+            // Direct 1:1 movement (feels most responsive)
+            currentY = deltaY;
+            content.style.transform = `translateY(${currentY}px)`;
+        }
+    };
+
+    const onTouchEnd = (e) => {
+        if (!isDragging) {
+            content.style.transition = '';
+            return;
+        }
+
+        isDragging = false;
+        content.classList.remove('is-dragging');
+
+        const endTime = Date.now();
+        const timeDiff = endTime - startTime;
+        const velocity = currentY / timeDiff;
+
+        // --- CLOSING LOGIC ---
+        // Threshold: Dragged > 120px OR Fast Flick
+        if (currentY > 120 || (velocity > 0.5 && currentY > 40)) {
+            
+            // 1. ANIMATE CONTENT DROP (Physics)
+            content.style.transition = 'transform 0.2s ease-out';
+            content.style.transform = 'translateY(100vh)'; 
+
+            // 2. ANIMATE BACKDROP FADE (The Fix)
+            // We fade the parent modal container simultaneously
+            modal.style.transition = 'opacity 0.2s ease-out';
+            modal.style.opacity = '0';
+
+            // 3. WAIT & RESET
+            setTimeout(() => {
+                modal.classList.remove('active'); 
+                
+                // Reset ALL styles for next open
+                content.style.transform = '';
+                content.style.transition = '';
+                
+                modal.style.transition = ''; // Remove inline transition
+                modal.style.opacity = '';    // Remove inline opacity
+                
+                unlockScroll();
+                
+            }, 200); // Matches the 0.2s duration
+
+        } else {
+            // --- SNAP BACK (Cancel Close) ---
+            content.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+            content.style.transform = '';
+        }
+        
+        currentY = 0;
+    };
+
+    // Attach Listeners
+    content.addEventListener('touchstart', onTouchStart, { passive: true });
+    content.addEventListener('touchmove', onTouchMove, { passive: false }); 
+    content.addEventListener('touchend', onTouchEnd, { passive: true });
+}
+
+/* --- INITIALIZE ALL MODALS --- */
+function initAllSwipeGestures() {
+    const allModalIds = [
+        'createPostModal',
+        'sortFilterModal',
+        'eventFilterModal',
+        'exploreFilterModal',
+        'postDetailModal',
+        'storyUploadModal',
+        'storyViewerModal', 
+        'savedPostsModal',
+        'connectionsModal',
+        'viewProfileModal',
+        'addEventModal'
+    ];
+
+    allModalIds.forEach(id => enableSwipeToClose(id));
+}
+
+// Start the engine
+initAllSwipeGestures();
+
 window.openCreatePostModal = function () {
     lockScroll();
     const modal = document.getElementById('createPostModal');
