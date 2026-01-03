@@ -1,110 +1,652 @@
 <!DOCTYPE html>
+
 <html lang="en">
 
+
+
 <head>
-    <link rel="manifest" href="./manifest.json" />
+
+    <link rel="manifest" href="manifest.json">
+
+    <link rel="stylesheet" href="style.css">
+
     <meta name="theme-color" content="#000000">
+
     <meta name="apple-mobile-web-app-capable" content="yes">
+
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <meta name="mobile-web-app-capable" content="yes">
+
     <meta charset="UTF-8">
+
     <meta name="viewport"
+
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
     <title>V-SYNC</title>
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        /* --- DYNAMIC POLL INPUTS --- */
-        .poll-input-row {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            margin-bottom: 8px;
-        }
 
-        .poll-input-row input {
-            flex: 1;
-            /* Input takes available space */
-            margin-bottom: 0 !important;
-            /* Reset default margin */
-        }
 
-        .btn-remove-opt {
-            background: rgba(255, 69, 58, 0.2);
-            color: #ff453a;
-            border: 1px solid #ff453a;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-weight: bold;
-            flex-shrink: 0;
-        }
 
-        .btn-remove-opt:hover {
-            background: #ff453a;
-            color: white;
-        }
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
-        /* Ensure SVGs inside circles/buttons are centered and match theme */
-        .requests-icon-style svg,
-        .sort-btn-style svg {
-            display: block;
-            transition: transform 0.3s ease;
-        }
+    <script type="text/javascript">
 
-        .sort-btn-style:hover svg {
-            transform: rotate(90deg) scale(1.1);
-            /* Subtle professional interaction */
-        }
+        (function () {
 
-        .requests-icon-style:hover svg {
-            stroke: var(--text-main);
-        }
+            emailjs.init("1RBlJ5dSeKAbJAqed");
 
-        /* --- CHAT LAYOUT SYSTEM --- */
-        #chatMainWrapper {
-            display: flex;
-            gap: 20px;
-            height: 75vh;
-            /* Desktop Height */
-        }
+        })();
 
-        #activeChatsList {
-            flex: 0 0 300px;
-            /* Fixed width on desktop */
-            overflow-y: auto;
-            border-right: 1px solid var(--border-color);
-        }
+    </script>
 
-        #messageView {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: var(--bg-card);
-            border-radius: var(--radius-lg);
-            overflow: hidden;
-            border: 1px solid var(--border-color);
-        }
+</head>
 
-        .chat-back-btn {
-            display: none;
-            /* Hidden on Desktop */
-            margin-right: 15px;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--primary-color);
-        }
 
-        /* --- MOBILE CHAT (Immersive Full Screen) --- */
-        @media (max-width: 600px) {
 
-            /* 1. Master List (Active Conversations) */
-            #chatMainWrapper {
-                display: block !important;
-                height: calc(100vh - 140px);
+<body>
+
+    <div id="splashScreen">
+
+        <div class="atom-container">
+
+            <div class="atom-ring ring-1">
+
+                <div class="atom-dot"></div>
+
+            </div>
+
+            <div class="atom-ring ring-2">
+
+                <div class="atom-dot"></div>
+
+            </div>
+
+            <div class="atom-ring ring-3">
+
+                <div class="atom-dot"></div>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="splash-content">
+
+            <div class="logo-wrapper">
+
+                <div class="vsync-monogram">V</div>
+
+                <div class="logo-shine"></div>
+
+            </div>
+
+            <div class="brand-text">
+
+                <span class="v-letter">V</span><span class="divider">-</span><span class="sync-text">SYNC</span>
+
+            </div>
+
+            <div class="minimal-loader">
+
+                <div class="loader-bar"></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="authScreen" class="auth-container"
+
+        style="max-width: 900px; margin: 60px auto; padding: 40px; background: var(--bg-card); border-radius: 24px; border: 1px solid var(--border-color);">
+
+        <h2
+
+            style="margin-bottom: 20px; font-size: 32px; background: var(--primary-color);background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; text-align: center;">
+
+            V-SYNC Portal</h2>
+
+
+
+        <div style="display: flex; gap: 40px; align-items: flex-start; text-align: left;">
+
+
+
+            <div style="flex: 1.2;">
+
+
+
+                <div id="loginSection">
+
+                    <h3 style="margin-bottom: 15px; color: var(--text-main); font-size: 20px;">Login</h3>
+
+                    <form onsubmit="handleLogin(event)">
+
+                        <div class="form-group">
+
+                            <label>College Email</label>
+
+                            <input type="email" id="loginEmail" placeholder="Enter email..." value="">
+
+                        </div>
+
+                        <div class="form-group">
+
+                            <label>Password</label>
+
+                            <div class="password-wrapper">
+
+                                <input type="password" id="loginPassword" value="" placeholder="Enter password...">
+
+                                <div class="password-toggle-icon"
+
+                                    onclick="togglePasswordVisibility('loginPassword', this)">
+
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+
+                                        <circle cx="12" cy="12" r="3"></circle>
+
+                                    </svg>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="anon-toggle-wrapper">
+
+                            <label class="switch">
+
+                                <input type="checkbox" id="loginAnon">
+
+                                <span class="slider"></span>
+
+                            </label>
+
+                            <div>
+
+                                <span style="font-weight: 700; color: white;">Login as an Anonymous user</span>
+
+                                <div style="font-size: 11px; color: var(--text-secondary);">Mask identity, read & post
+
+                                    only.</div>
+
+                            </div>
+
+                        </div>
+
+                        <div style="text-align: right; margin-bottom: 15px;">
+
+                            <span style="color: var(--primary-color); font-size: 15px; cursor: pointer;"
+
+                                onclick="openForgotModal()">Forgot Password?</span>
+
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">Login</button>
+
+                    </form>
+
+                    <p class="auth-toggle-text">
+
+                        Don't have an account? <span class="auth-link"
+
+                            onclick="toggleAuthMode('register')">Register</span>
+
+                    </p>
+
+                </div>
+
+
+
+                <div id="registerSection" class="hidden">
+
+                    <h3 style="margin-bottom: 15px; color: var(--text-main); font-size: 20px;">Create Account</h3>
+
+                    <div class="auth-scroll-container">
+
+                        <form onsubmit="handleRegister(event)">
+
+                            <div class="anon-toggle-wrapper">
+
+                                <label class="switch">
+
+                                    <input type="checkbox" id="regAnon">
+
+                                    <span class="slider"></span>
+
+                                </label>
+
+                                <div>
+
+                                    <span style="font-weight: 700; color: white;">Register as Anonymous user</span>
+
+                                    <div style="font-size: 11px; color: var(--text-secondary);">We see your data, but
+
+                                        the public won't.</div>
+
+                                </div>
+
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+
+                                <div class="form-group">
+
+                                    <label>First Name</label>
+
+                                    <input type="text" id="regFirstName" required placeholder="e.g. Rahul"
+
+                                        style="text-transform: capitalize;">
+
+                                </div>
+
+                                <div class="form-group">
+
+                                    <label>Last Name</label>
+
+                                    <input type="text" id="regLastName" required placeholder="e.g. Sharma"
+
+                                        style="text-transform: capitalize;">
+
+                                </div>
+
+                            </div>
+
+                            <div class="form-group"><label>College Email</label><input type="email" id="regEmail"
+
+                                    required></div>
+
+                            <div class="form-group">
+
+                                <label>Password</label>
+
+                                <div class="password-wrapper">
+
+                                    <input type="password" id="regPass" required placeholder="Create password...">
+
+                                    <div class="password-toggle-icon"
+
+                                        onclick="togglePasswordVisibility('regPass', this)">
+
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+
+                                            stroke-linejoin="round">
+
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+
+                                            <circle cx="12" cy="12" r="3"></circle>
+
+                                        </svg>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                    </div>
+
+
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+
+                        <div class="form-group"><label>Age</label><input type="number" id="regAge" required min="16"
+
+                                max="99"></div>
+
+                        <div class="form-group"><label>Gender</label><select id="regGender" required
+
+                                style="width: 100%; padding: 14px; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: 12px;">
+
+                                <option value="Male">Male</option>
+
+                                <option value="Female">Female</option>
+
+                            </select></div>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>Current Year</label>
+
+                        <select id="regYear" required onchange="validateRoleOptions()"
+
+                            style="width: 100%; padding: 14px; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: 12px;">
+
+                            <option value="" disabled selected>Select Year</option>
+
+                            <option value="FE">First Year (FE)</option>
+
+                            <option value="SE">Second Year (SE)</option>
+
+                            <option value="TE">Third Year (TE)</option>
+
+                            <option value="BE">Fourth Year (BE)</option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>I am a...</label>
+
+                        <select id="regRole" required
+
+                            style="width: 100%; padding: 14px; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: 12px; font-family: inherit;">
+
+                            <option value="student" selected>Student</option>
+
+                            <option value="mentor">Mentor</option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>College / University</label>
+
+                        <select id="regCollege" required
+
+                            style="width: 100%; padding: 14px; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: 12px; font-family: inherit;">
+
+                            <option value="" disabled selected>Select College</option>
+
+                            <option value="VIT">Vidyalankar Institute of Technology</option>
+
+                            <option value="VSIT">Vidyalankar School of Information Technology</option>
+
+                            <option value="VP">Vidyalankar Polytechnic</option>
+
+                        </select>
+
+                    </div>
+
+
+
+                    <div class="form-group">
+
+                        <label>Profile Picture (Optional)</label>
+
+                        <input type="file" id="regFile" accept="image/*" style="display:none;"
+
+                            onchange="document.getElementById('regFileName').innerText = this.files[0].name">
+
+                        <button type="button" class="btn btn-secondary"
+
+                            onclick="document.getElementById('regFile').click()" style="width:100%">Upload
+
+                            Photo</button>
+
+                        <small id="regFileName" style="color:var(--text-secondary);">No file chosen</small>
+
+                    </div>
+
+
+
+                    <div class="form-group">
+
+                        <label>Work Experience</label>
+
+                        <div id="workExpContainer"></div>
+
+                        <button type="button" class="btn btn-secondary" onclick="addExperienceField()"
+
+                            style="font-size: 12px; margin-top: 5px;">+ Add Experience</button>
+
+                    </div>
+
+                    <button type="submit" class="btn btn-primary"
+
+                        style="width: 100%; padding: 12px; margin-top: 20px;">Register</button>
+
+                    </form>
+
+                </div>
+
+                <p class="auth-toggle-text">Already have an account? <span class="auth-link"
+
+                        onclick="toggleAuthMode('login')">Login</span></p>
+
+            </div>
+
+
+
+        </div>
+
+        <div style="width: 1px; background: var(--border-color); align-self: stretch;"></div>
+
+        <div style="flex: 0.8; display: flex; flex-direction: column;">
+
+            <h3 style="margin-bottom: 15px; color: var(--text-main);">Dev Switcher</h3>
+
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Select any registered account to
+
+                login instantly:</p>
+
+            <div id="devUserList"
+
+                style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; padding-right: 5px;">
+
+                <p style="color: #666; font-size: 13px;">Loading accounts...</p>
+
+            </div>
+
+            <button class="btn btn-secondary" onclick="loadDevUsers()"
+
+                style="margin-top: 15px; font-size: 12px; width: 100%;">↻ Refresh List</button>
+
+            <button class="btn btn-danger" onclick="adminWipeDB()"
+
+                style="margin-top: 10px; font-size: 12px; width: 100%; border: 1px solid #ff453a; background: rgba(255, 69, 58, 0.1);">
+
+                Factory Reset (Delete All Data)
+
+            </button>
+
+            <button class="btn btn-secondary" onclick="openAdminPanel()"
+
+                style="margin-top: 10px; font-size: 12px; width: 100%; border: 1px solid #ff453a; color: #ff453a;">
+
+                👮‍♂️ Open Admin Dashboard
+
+            </button>
+
+        </div>
+
+    </div>
+
+    </div>
+
+
+
+    <div id="appScreen" class="hidden">
+
+        <div class="container">
+
+            <div class="navbar">
+
+                <div class="navbar-brand">
+
+                    <h1>V-SYNC</h1>
+
+                    <p id="userInfo"></p>
+
+                </div>
+
+                <div class="navbar-right">
+
+                    <div style="display: flex; gap: 15px; align-items: center;">
+
+                        <div class="requests-icon-style" onclick="openConnectionsModal()" title="My Connections">
+
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+
+                                <circle cx="9" cy="7" r="4"></circle>
+
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+
+                            </svg>
+
+                        </div>
+
+                        <div class="requests-icon-style" onclick="switchTab('requests')" title="Pending Requests"
+
+                            style="position: relative;">
+
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+                                <path
+
+                                    d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+
+                                </path>
+
+                            </svg>
+
+                            <span id="requestBadge" class="notification-badge hidden">0</span>
+
+                        </div>
+
+                        <div id="navProfileContainer" class="profile-circle" onclick="switchTab('profile')"
+
+                            title="My Profile"></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="tabs">
+
+                <button class="tab-button" onclick="switchTab(event, 'events')"
+
+                    style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+
+                    </svg>
+
+                    <span class="tab-label">Events</span>
+
+                </button>
+
+                <button class="tab-button" onclick="switchTab(event, 'chats')">
+
+                    <div style="position: relative;">
+
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+                            <path
+
+                                d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z">
+
+                            </path>
+
+                        </svg>
+
+                        <span id="msgBadge" class="notification-badge hidden"
+
+                            style="top: -2px; right: -2px; border: 2px solid var(--bg-card);">0</span>
+
+                    </div>
+
+                    <span class="tab-label">Messages</span>
+
+                </button>
+
+
+
+                <button class="tab-button" onclick="switchTab(event, 'community')">
+
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+
+                        <circle cx="9" cy="7" r="4"></circle>
+
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+
+                    </svg>
+
+                    <span class="tab-label">Community</span>
+
+                </button>
+
+
+
+                <button class="tab-button" onclick="switchTab(event, 'mentors')"
+
+                    style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <circle cx="11" cy="11" r="8"></circle>
+
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+
+                    </svg>
+
+                    <span class="tab-label">Explore</span>
+
+                </button>
+
+                <button class="tab-button" onclick="switchTab(event, 'leaderboard')">
+
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+
+                        <path d="M18 9h1.5a2.5 2.5 0 0 0 0                height: calc(100vh - 140px);
                 /* Normal height for the list */
             }
 
@@ -10320,5 +10862,6 @@ function formatBytes(bytes, decimals = 1) {
   }
 </script>
 </body>
+
 
 </html>
